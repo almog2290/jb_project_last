@@ -1,0 +1,72 @@
+trigger:
+  branches:
+    include:
+      - feature-azure
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  DOCKER_REGISTRY: 'madaralmog-dockerhub-devops'
+  REPO_NAME: 'flask-aws-monitor-azure'
+  DOCKER_FILE_PATH: '$(Build.SourcesDirectory)/app/Dockerfile'
+  IMAGE_TAG: '$(Build.BuildId)'
+
+jobs:
+- job: Linting
+  displayName: 'Run Linting'
+  steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '3.12'
+      addToPath: true
+    displayName: 'Setup Python 3.12'
+
+  - script: |
+      python -m venv .venv
+      source .venv/bin/activate
+      pip install flake8
+      python -m flake8 ./app/src --exclude=tests --ignore=E111,E114,E121,E302,E305,E501,W293
+    displayName: 'Run flake8 - linting'
+
+- job: SecurityCheck
+  displayName: 'Run Security Check'
+  steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '3.12'
+      addToPath: true
+    displayName: 'Setup Python 3.12'
+
+  - script: |
+      python -m venv .venv
+      source .venv/bin/activate
+      pip install bandit
+      python -m bandit -r ./app/src --exclude=tests || true
+    displayName: 'Run Bandit - security check'
+
+- job: BuildAndPushDockerImage
+  displayName: 'Build & Push Docker Image'
+  dependsOn:
+    - Linting
+    - SecurityCheck
+  steps:
+  - task: Docker@2
+    inputs:
+      command: 'build'
+      containerRegistry: '$(DOCKER_REGISTRY)'
+      repository: '$(REPO_NAME)'
+      dockerfile: '$(DOCKER_FILE_PATH)'
+      tags: |
+        $(IMAGE_TAG)
+        latest
+    displayName: 'Build Docker Image'
+  - task: Docker@2
+    inputs:
+      command: 'push'
+      containerRegistry: '$(DOCKER_REGISTRY)'
+      repository: '$(REPO_NAME)'
+      tags: |
+        $(IMAGE_TAG)
+        latest
+    displayName: 'Push Docker Image'
