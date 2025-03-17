@@ -1,11 +1,23 @@
-installDashboard.sh
-**/**/__pycache__
-welcome/workshop/part-2-fe/__pycache__/server.cpython-39.pyc
-# Byte-compiled / optimized / DLL files
+# Byte-compiled Python files
+*.pyc
+*.pyo
+*.pyd
+
+# Python virtual environment
+.venv/
+
+# Python cache files
 __pycache__/
-*.py[cod]
-keys/
-keys/
+
+# IDE configuration files
+.vscode/
+.idea/
+
+# Log and temporary files
+*.log
+*.tmp
+*.cache
+
 # Local .terraform directories
 **/.terraform/*
 
