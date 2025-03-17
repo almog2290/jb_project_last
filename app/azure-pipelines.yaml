@@ -29,8 +29,32 @@ jobs:
       python -m flake8 ./app/src --exclude=tests --ignore=E111,E114,E121,E302,E305,E501,W293
     displayName: 'Run flake8 - linting'
 
-- job: SecurityCheck
-  displayName: 'Run Security Check'
+- job: Linting shell scripts
+  displayName: 'Run Linting shell scripts'
+  steps:
+  - script: |
+      cd ./app/src
+      apt-get update
+      apt install -y shellcheck
+      FILES=$(find . -type f -name "*.sh")
+      if [ -n "$FILES" ]; then
+          echo "$FILES" | xargs shellcheck
+      else
+          echo "No shell scripts found"
+      fi
+    displayName: 'Linting scripts (shellcheck)'
+
+- job: Lint Dockerfile
+  displayName: 'Run Lint Dockerfile'
+  container: hadolint/hadolint:latest
+  steps:
+  - script: |
+      hadolint ./app/src/Dockerfile
+    displayName: 'Run Lint Dockerfile'
+
+
+- job: Security Scan - python code
+  displayName: 'Run Security Scan(Bandit)'
   steps:
   - task: UsePythonVersion@0
     inputs:
@@ -44,6 +68,18 @@ jobs:
       pip install bandit
       python -m bandit -r ./app/src --exclude=tests || true
     displayName: 'Run Bandit - security check'
+
+
+- job: Security Scan - Trivy
+  displayName: 'Security Scan - Trivy(Scan Docker Image)'
+  steps:
+  - script: |
+      apt-get update
+      apt-get install -y trivy
+    displayName: 'Install Trivy'
+  - script: |
+      trivy image $(DOCKER_REGISTRY)/$(REPO_NAME):$(IMAGE_TAG)
+    displayName: 'Run Trivy - security check'
 
 - job: BuildAndPushDockerImage
   displayName: 'Build & Push Docker Image'
