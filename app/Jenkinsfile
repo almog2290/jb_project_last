@@ -1,0 +1,140 @@
+pipeline {
+    agent {
+        label 'docker'
+    }
+    environment {
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub-mogli-creds') 
+        DOCKER_REGISTRY = 'madaralmog'
+        REPO_NAME = 'flask-aws-monitor'
+        IMAGE_TAG = "${env.BUILD_NUMBER}"
+        APP_PATH = 'app'
+    }
+    stages {
+        stage('Clone Python Project') {
+            steps {
+                git branch: 'main', url: 'https://github.com/almog2290/jb_project_last.git'
+            }
+        }
+
+        stage('Lint & Security Scanning') {
+            parallel{
+                stage('Linting'){
+                    stages{
+                        stage('Lint python code'){
+                            agent{
+                                docker {
+                                    image 'python:3.10'
+                                    args '-v $HOME/.cache/pip:/root/.cache/pip'
+                                    reuseNode true
+                                }
+                            }
+                            steps{
+                                dir(env.APP_PATH){
+                                    echo "Linting python code(flake8)"
+                                    sh '''
+                                        python -m venv .venv
+                                        . .venv/bin/activate  # source .venv/bin/activate (Bash)
+                                        pip install flake8
+                                        python -m flake8 ./src --exclude=tests
+                                    '''
+                                }
+                            }
+                        }
+                        stage("Lint shell scripts"){
+                            steps{
+                                dir(env.APP_PATH){
+                                    echo "Linting shell scripts"
+                                    sh '''
+                                        apt-get update
+                                        apt install -y shellcheck
+                                        FILES=$(find . -type f -name "*.sh")
+                                        if [ -n "$FILES" ]; then
+                                            echo "$FILES" | xargs shellcheck
+                                        else
+                                            echo "No shell scripts found"
+                                        fi
+                                    '''
+                                }
+                            }
+                        }
+                        stage("Lint Dockerfile"){
+                            steps{
+                                dir(env.APP_PATH){
+                                    echo "Linting Dockerfile"
+                                    sh '''
+                                        ls -la
+                                        docker run --rm -i -v /var/run/docker.sock:/var/run/docker.sock hadolint/hadolint < Dockerfile
+                                    '''
+                                }
+                            }
+                        }
+                    }
+                }
+                stage("Security scan"){
+                    stages{
+                        stage('Security Scan - python code'){
+                            agent{
+                                docker {
+                                    image 'python:3.10'
+                                    args '-v $HOME/.cache/pip:/root/.cache/pip'
+                                    reuseNode true
+                                }
+                            }
+                            steps{
+                                dir(env.APP_PATH){
+                                    sh '''
+                                        python -m venv .venv
+                                        . .venv/bin/activate  # source .venv/bin/activate (Bash)
+                                        pip install bandit
+                                        python -m bandit -r ./src --exclude=tests
+                                    '''
+                                }
+                            }
+                        }
+                        stage('Security Scan - Trivy'){
+                            steps{
+                                dir(env.APP_PATH){
+                                    echo "Trivy , build temporary image for security scanning"
+                                    sh '''
+                                        docker build -t $DOCKER_REGISTRY/$REPO_NAME:trivy .
+                                        docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image --exit-code 0 --severity HIGH,CRITICAL $DOCKER_REGISTRY/$REPO_NAME:trivy
+                                    '''
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                dir(env.APP_PATH){
+                    sh "docker build -t $DOCKER_REGISTRY/$REPO_NAME:$IMAGE_TAG ."
+                    sh "docker tag $DOCKER_REGISTRY/$REPO_NAME:$IMAGE_TAG $DOCKER_REGISTRY/$REPO_NAME:latest"
+                }
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                sh "echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin"
+                sh "docker push $DOCKER_REGISTRY/$REPO_NAME:$IMAGE_TAG"
+                sh "docker push $DOCKER_REGISTRY/$REPO_NAME:latest"
+            }
+        }
+    }
+    post {
+        always {
+            echo 'Cleaning up workspace'
+            cleanWs()
+        }
+        success {
+            echo 'Pipeline completed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed! Check logs for details.'
+        }
+    }
+}
+
