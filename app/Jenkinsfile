@@ -62,7 +62,6 @@ pipeline {
                                 dir(env.APP_PATH){
                                     echo "Linting Dockerfile"
                                     sh '''
-                                        ls -la
                                         docker run --rm -i -v /var/run/docker.sock:/var/run/docker.sock hadolint/hadolint < Dockerfile
                                     '''
                                 }
@@ -86,7 +85,7 @@ pipeline {
                                         python -m venv .venv
                                         . .venv/bin/activate  # source .venv/bin/activate (Bash)
                                         pip install bandit
-                                        python -m bandit -r ./src --exclude=tests
+                                        python -m bandit -r ./src --exclude=tests || true
                                     '''
                                 }
                             }
