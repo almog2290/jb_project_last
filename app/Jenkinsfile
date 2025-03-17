@@ -12,7 +12,7 @@ pipeline {
     stages {
         stage('Clone Python Project') {
             steps {
-                git branch: 'main', url: 'https://github.com/almog2290/jb_project_last.git'
+                git branch: 'feature-jenkins', url: 'https://github.com/almog2290/jb_project_last.git'
             }
         }
 
